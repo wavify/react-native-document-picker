@@ -221,6 +221,11 @@ RCT_EXPORT_METHOD(show:(NSDictionary *)options
       PHAsset *pickedAsset = [PHAsset fetchAssetsWithALAssetURLs:@[videoRefURL] options:nil].lastObject;
       NSString *originalFilename = [self originalFilenameForAsset:pickedAsset assetType:PHAssetResourceTypeVideo];
       fileName = originalFilename ?: [NSNull null];
+    } else {
+      NSDateFormatter *dateFormat = [[NSDateFormatter alloc] init];
+      [dateFormat setDateFormat:@"YYYY-MM-dd_HH-mm-ss"];
+      NSString *extension = [fileName pathExtension];
+      fileName = [NSString stringWithFormat:@"VIDEO-%@.%@", [dateFormat stringFromDate:[NSDate new]], extension];
     }
     
     if ([videoURL.URLByResolvingSymlinksInPath.path isEqualToString:videoDestinationURL.URLByResolvingSymlinksInPath.path] == NO) {
