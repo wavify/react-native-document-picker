@@ -15,7 +15,9 @@
 #import <AssetsLibrary/AssetsLibrary.h>
 @import MobileCoreServices;
 
-@interface RNDocumentPicker () <UIDocumentMenuDelegate,UIDocumentPickerDelegate,UIImagePickerControllerDelegate>
+#import "QBImagePicker.h"
+
+@interface RNDocumentPicker () <UIDocumentMenuDelegate,UIDocumentPickerDelegate,UIImagePickerControllerDelegate, QBImagePickerControllerDelegate>
 @end
 
 
@@ -56,12 +58,13 @@ RCT_EXPORT_METHOD(show:(NSDictionary *)options
 
     documentPicker.delegate = self;
   [documentPicker addOptionWithTitle:@"Photo Library" image:nil order:UIDocumentMenuOrderFirst handler:^{
-      UIImagePickerController *imagePickerController = [[UIImagePickerController alloc] init];
-      
+      QBImagePickerController *imagePickerController = [QBImagePickerController new];
       imagePickerController.delegate = self;
-      imagePickerController.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
-      imagePickerController.mediaTypes = [[NSArray alloc] initWithObjects:(NSString *)kUTTypeImage, (NSString *)kUTTypeMovie, nil];
-      [rootViewController presentViewController:imagePickerController animated:YES completion:nil];
+      imagePickerController.allowsMultipleSelection = YES;
+      imagePickerController.maximumNumberOfSelection = 6;
+      imagePickerController.showsNumberOfSelectedAssets = YES;
+      
+      [rootViewController presentViewController:imagePickerController animated:YES completion:NULL];
     }];
     [documentPicker addOptionWithTitle:@"Take Photo or Video" image:nil order:UIDocumentMenuOrderFirst handler:^{
       UIImagePickerController *imagePickerController = [[UIImagePickerController alloc] init];
@@ -257,6 +260,42 @@ RCT_EXPORT_METHOD(show:(NSDictionary *)options
   dispatch_async(dispatch_get_main_queue(), ^{
     [picker dismissViewControllerAnimated:YES completion:nil];
   });
+}
+
+- (void)qb_imagePickerController:(QBImagePickerController *)imagePickerController didFinishPickingAssets:(NSArray *)assets {
+  RCTResponseSenderBlock callback = [composeCallbacks lastObject];
+  [composeCallbacks removeLastObject];
+  
+  UIViewController *rootViewController = [[[[UIApplication sharedApplication]delegate] window] rootViewController];
+  while (rootViewController.modalViewController) {
+    rootViewController = rootViewController.modalViewController;
+  }
+  
+  PHImageManager *imageManager = [PHImageManager new];
+  NSMutableArray *results = [NSMutableArray new];
+  dispatch_group_t serviceGroup = dispatch_group_create();
+  
+  for (PHAsset *asset in assets) {
+    dispatch_group_enter(serviceGroup);
+    [imageManager requestImageDataForAsset:asset
+                                   options:0
+                             resultHandler:^(NSData *imageData, NSString *dataUTI, UIImageOrientation orientation, NSDictionary *info) {
+                               NSURL *url = [info valueForKey:@"PHImageFileURLKey"];
+                               NSString *uri = [url path];
+                               NSString *fileName = [url lastPathComponent];
+                               
+                               NSMutableDictionary* result = [NSMutableDictionary dictionary];
+                               [result setValue:uri forKey:@"uri"];
+                               [result setValue:fileName forKey:@"fileName"];
+                               [results addObject:result];
+                               dispatch_group_leave(serviceGroup);
+                             }];
+  }
+  
+  dispatch_group_notify(serviceGroup, dispatch_get_main_queue(),^{
+    callback(@[[NSNull null], results]);
+  });
+  [rootViewController dismissViewControllerAnimated:YES completion:NULL];
 }
 
 - (UIImage *)fixOrientation:(UIImage *)srcImg {
